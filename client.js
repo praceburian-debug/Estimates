@@ -30,29 +30,39 @@ window.TrelloPowerUp.initialize({
   'card-buttons': function (t) {
     var context = t.getContext();
     var memberId = context.member;
-    return window.PrimeEstimatesApi.call('checkAccess', { memberId: memberId }).then(function (access) {
-      if (!access || !access.authorized) return [];
-      return [
-        {
-          icon: ESTIMATES_ICON,
-          text: 'Estimates',
-          callback: function (t) {
-            return t.modal({
-              title: 'Estimates',
-              url: './popup.html',
-              fullscreen: true,
-              accentColor: '#6c5ce7',
-            });
+    return window.PrimeEstimatesApi.call('checkAccess', { memberId: memberId })
+      .then(function (access) {
+        if (!access || !access.authorized) return [];
+        return [
+          {
+            icon: ESTIMATES_ICON,
+            text: 'Estimates',
+            callback: function (t) {
+              return t.modal({
+                title: 'Estimates',
+                url: './popup.html',
+                fullscreen: true,
+                accentColor: '#6c5ce7',
+              });
+            },
           },
-        },
-      ];
-    });
+        ];
+      })
+      .catch(function (err) {
+        console.error('[Prime Estimates] card-buttons capability failed:', err);
+        return [];
+      });
   },
 
   'card-badges': function (t) {
-    return t.get('card', 'shared', 'estimateTotal').then(function (total) {
-      if (!total) return [];
-      return [{ text: 'Odhad ' + total + ' h', color: 'purple' }];
-    });
+    return t.get('card', 'shared', 'estimateTotal')
+      .then(function (total) {
+        if (!total) return [];
+        return [{ text: 'Odhad ' + total + ' h', color: 'purple' }];
+      })
+      .catch(function (err) {
+        console.error('[Prime Estimates] card-badges capability failed:', err);
+        return [];
+      });
   },
 });

@@ -251,8 +251,8 @@
       .then(function (results) {
         var boardMembers = results[0] || [];
         var adminsRes = results[1];
-        console.log('[Prime Estimates] board members:', boardMembers);
-        console.log('[Prime Estimates] listAdmins result:', adminsRes);
+        console.log('[Prime Estimates] board members JSON:', JSON.stringify(boardMembers));
+        console.log('[Prime Estimates] listAdmins result JSON:', JSON.stringify(adminsRes));
 
         if (adminsRes && adminsRes.error) return; // not master, panel stays hidden entirely
 
