@@ -197,6 +197,62 @@
 
   document.getElementById('refresh-search').addEventListener('click', runSearch);
 
+  // ---------------------------- manage admins (master only) ----------------------------
+
+  function renderAdminPanel(boardMembers, adminIds, masterAdminId) {
+    var statusEl = document.getElementById('admin-status');
+    var listEl = document.getElementById('admin-member-list');
+    statusEl.style.display = 'none';
+    listEl.innerHTML = '';
+    boardMembers.forEach(function (m) {
+      var isAdmin = adminIds.indexOf(m.id) !== -1;
+      var isMasterRow = m.id === masterAdminId;
+      var row = document.createElement('div');
+      row.className = 'admin-member';
+
+      var nameSpan = document.createElement('span');
+      nameSpan.className = 'name';
+      nameSpan.textContent = m.fullName || m.username || m.id;
+      if (isMasterRow) {
+        var tag = document.createElement('span');
+        tag.className = 'tag';
+        tag.textContent = 'master admin';
+        nameSpan.appendChild(tag);
+      }
+      row.appendChild(nameSpan);
+
+      if (!isMasterRow) {
+        var btn = document.createElement('button');
+        btn.className = 'small ' + (isAdmin ? 'danger' : 'primary');
+        btn.textContent = isAdmin ? 'Odebrat' : 'Přidat jako admina';
+        btn.addEventListener('click', function () {
+          btn.disabled = true;
+          var action = isAdmin ? 'removeAdmin' : 'addAdmin';
+          window.PrimeEstimatesApi.call(action, { memberId: memberId, targetId: m.id }).then(function (res) {
+            if (res && res.error) {
+              alert('Chyba: ' + res.error);
+              btn.disabled = false;
+              return;
+            }
+            loadAdminPanel();
+          });
+        });
+        row.appendChild(btn);
+      }
+      listEl.appendChild(row);
+    });
+  }
+
+  function loadAdminPanel() {
+    Promise.all([t.board('members'), window.PrimeEstimatesApi.call('listAdmins', { memberId: memberId })]).then(function (results) {
+      var boardMembers = results[0] || [];
+      var adminsRes = results[1];
+      if (adminsRes && adminsRes.error) return; // not master, panel stays hidden
+      document.getElementById('admin-panel').style.display = 'block';
+      renderAdminPanel(boardMembers, adminsRes.admins || [], adminsRes.masterAdminId);
+    });
+  }
+
   // ---------------------------- init ----------------------------
 
   Promise.all([t.card('name', 'labels'), t.board('name'), t.get('card', 'shared', 'estimates', []), t.get('card', 'shared', 'estimateTotal')])
@@ -228,6 +284,8 @@
       clientEditor = makeChipEditor('kw-client', board.name ? [board.name] : [], '+ přidat klienta');
       typeEditor = makeChipEditor('kw-type', labelNames, '+ přidat typ');
       taskEditor = makeChipEditor('kw-task', card.name ? [card.name] : [], '+ přidat slovo');
+
+      loadAdminPanel(); // no-op / stays hidden if this user isn't the master admin
 
       return runSearch();
     })
