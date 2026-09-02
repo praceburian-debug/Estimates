@@ -1,19 +1,28 @@
 /**
- * popup.js — the "Estimates" popup: left column is the manual estimate
- * (saved on the card, visible to clients too — that's fine, only the
- * real tracked-time numbers on the right are restricted), right column
- * is up to 5 suggestions pulled from real tracked time via the Apps
- * Script backend.
+ * popup.js — content of the fullscreen Estimates modal. Left panel is the
+ * manual estimate (saved on the card, visible to clients too — that's
+ * fine, only the real tracked-time numbers on the right are restricted),
+ * right panel is up to 5 suggestions pulled from real tracked time via
+ * the Apps Script backend. "Manage admins" now lives as a gear icon in
+ * the modal's own header (see client.js), not on this page.
  */
 (function () {
   var t = window.TrelloPowerUp.iframe();
   var rowsContainer = document.getElementById('estimate-rows');
-  var totalLine = document.getElementById('total-line');
+  var totalLineValue = document.getElementById('total-line-value');
+  var statTotal = document.getElementById('stat-total');
+  var statCount = document.getElementById('stat-count');
+  var statLatest = document.getElementById('stat-latest');
   var suggestionsEl = document.getElementById('suggestions');
-  var manageLink = document.getElementById('manage-admins-link');
   var savedHint = document.getElementById('saved-hint');
 
   var rows = []; // { desc: string, hours: number }
+
+  function escapeHtml_(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
 
   function renderRows() {
     rowsContainer.innerHTML = '';
@@ -57,14 +66,16 @@
     });
   }
 
-  function updateTotal() {
-    var total = rows.reduce(function (sum, r) { return sum + (parseFloat(r.hours) || 0); }, 0);
-    totalLine.textContent = 'Celkem: ' + round1_(total) + ' h';
-    return total;
-  }
-
   function round1_(n) {
     return Math.round(n * 10) / 10;
+  }
+
+  function updateTotal() {
+    var total = rows.reduce(function (sum, r) { return sum + (parseFloat(r.hours) || 0); }, 0);
+    var display = round1_(total);
+    totalLineValue.textContent = display;
+    statTotal.textContent = display + ' h';
+    return total;
   }
 
   document.getElementById('add-row').addEventListener('click', function () {
@@ -89,6 +100,9 @@
 
   function renderSuggestions(list) {
     suggestionsEl.innerHTML = '';
+    statCount.textContent = list ? list.length : 0;
+    statLatest.textContent = (list && list[0] && list[0].date) ? list[0].date : '–';
+
     if (!list || list.length === 0) {
       suggestionsEl.innerHTML = '<div class="empty-hint">Nenašly se žádné podobné natrackované záznamy. Zkus upravit štítky nebo název karty.</div>';
       return;
@@ -97,19 +111,15 @@
       var el = document.createElement('div');
       el.className = 'suggestion';
       el.innerHTML =
+        '<div>' +
         '<div class="task">' + escapeHtml_(s.task) + '</div>' +
         '<div class="meta">' + escapeHtml_(s.client) + (s.type ? ' · ' + escapeHtml_(s.type) : '') +
         ' · ' + escapeHtml_(s.who) + (s.date ? ' · ' + escapeHtml_(s.date) : '') + '</div>' +
-        '<div class="hours">' + escapeHtml_(s.hoursDisplay || String(s.hours)) + ' h</div>';
+        '</div>' +
+        '<div class="hours">' + escapeHtml_(s.hoursDisplay) + ' h</div>';
       el.title = 'Klikni pro přidání jako řádek odhadu';
       el.addEventListener('click', function () { addSuggestionAsRow(s); });
       suggestionsEl.appendChild(el);
-    });
-  }
-
-  function escapeHtml_(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   }
 
@@ -120,8 +130,19 @@
       var savedEstimates = results[2];
       var memberId = t.getContext().member;
 
-      rows = (savedEstimates && savedEstimates.length) ? savedEstimates.slice() : (card.labels || []).map(function (l) {
-        return { desc: (l.name || 'bez štítku'), hours: '' };
+      document.getElementById('board-name').textContent = board.name;
+      document.getElementById('card-name').textContent = card.name;
+      var chipsEl = document.getElementById('chips');
+      (card.labels || []).forEach(function (l) {
+        if (!l.name) return;
+        var chip = document.createElement('span');
+        chip.className = 'chip';
+        chip.textContent = l.name;
+        chipsEl.appendChild(chip);
+      });
+
+      rows = (savedEstimates && savedEstimates.length) ? savedEstimates.slice() : (card.labels || []).filter(function (l) { return l.name; }).map(function (l) {
+        return { desc: l.name, hours: '' };
       });
       if (rows.length === 0) rows = [{ desc: '', hours: '' }];
       renderRows();
@@ -129,20 +150,12 @@
 
       var labelNames = (card.labels || []).map(function (l) { return l.name; }).filter(Boolean);
 
-      return window.PrimeEstimatesApi.call('checkAccess', { memberId: memberId }).then(function (access) {
-        if (access && access.isMaster) {
-          manageLink.style.display = 'inline';
-          manageLink.addEventListener('click', function () {
-            t.popup({ title: 'Spravovat adminy', url: 'admins.html', height: 440 });
-          });
-        }
-        return window.PrimeEstimatesApi.call('search', {
-          memberId: memberId,
-          client: board.name,
-          task: card.name,
-          types: labelNames.join(','),
-          limit: 5,
-        });
+      return window.PrimeEstimatesApi.call('search', {
+        memberId: memberId,
+        client: board.name,
+        task: card.name,
+        types: labelNames.join(','),
+        limit: 5,
       });
     })
     .then(function (searchResult) {
