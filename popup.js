@@ -1,10 +1,11 @@
 /**
  * popup.js — content of the fullscreen Estimates modal. Left panel is the
  * manual estimate (saved on the card, visible to clients too — that's
- * fine, only the real tracked-time numbers on the right are restricted),
- * right panel is up to 5 suggestions pulled from real tracked time via
- * the Apps Script backend. "Manage admins" now lives as a gear icon in
- * the modal's own header (see client.js), not on this page.
+ * fine, only the real tracked-time numbers on the right are restricted).
+ * A keyword panel up top shows exactly what's being searched for (seeded
+ * from board name / card name / labels) — the user can remove any chip,
+ * add their own, and re-run the search. "Manage admins" lives as a gear
+ * icon in the modal's own header (see client.js), not on this page.
  */
 (function () {
   var t = window.TrelloPowerUp.iframe();
@@ -16,13 +17,63 @@
   var suggestionsEl = document.getElementById('suggestions');
   var savedHint = document.getElementById('saved-hint');
 
-  var rows = []; // { desc: string, hours: number }
+  var rows = []; // estimate rows: { desc: string, hours: number }
+  var memberId = null;
 
   function escapeHtml_(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   }
+
+  // ---------------------------- keyword chips ----------------------------
+
+  function makeChipEditor(containerId, initialValues, placeholder) {
+    var container = document.getElementById(containerId);
+    var values = initialValues.slice();
+
+    function render() {
+      container.innerHTML = '';
+      values.forEach(function (val, idx) {
+        var chip = document.createElement('span');
+        chip.className = 'keyword-chip';
+        var label = document.createElement('span');
+        label.textContent = val;
+        var removeBtn = document.createElement('button');
+        removeBtn.textContent = '✕';
+        removeBtn.title = 'Odebrat';
+        removeBtn.addEventListener('click', function () {
+          values.splice(idx, 1);
+          render();
+        });
+        chip.appendChild(label);
+        chip.appendChild(removeBtn);
+        container.appendChild(chip);
+      });
+
+      var addWrap = document.createElement('span');
+      addWrap.className = 'keyword-add';
+      var input = document.createElement('input');
+      input.type = 'text';
+      input.placeholder = placeholder || '+ přidat';
+      input.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter' && input.value.trim()) {
+          values.push(input.value.trim());
+          input.value = '';
+          render();
+        }
+      });
+      addWrap.appendChild(input);
+      container.appendChild(addWrap);
+    }
+
+    render();
+    return { getValues: function () { return values.slice(); } };
+  }
+
+  var clientEditor, typeEditor, taskEditor;
+
+  // ---------------------------- estimate rows ----------------------------
 
   function renderRows() {
     rowsContainer.innerHTML = '';
@@ -98,13 +149,15 @@
     updateTotal();
   }
 
+  // ---------------------------- suggestions / search ----------------------------
+
   function renderSuggestions(list) {
     suggestionsEl.innerHTML = '';
     statCount.textContent = list ? list.length : 0;
     statLatest.textContent = (list && list[0] && list[0].date) ? list[0].date : '–';
 
     if (!list || list.length === 0) {
-      suggestionsEl.innerHTML = '<div class="empty-hint">Nenašly se žádné podobné natrackované záznamy. Zkus upravit štítky nebo název karty.</div>';
+      suggestionsEl.innerHTML = '<div class="empty-hint">Nenašly se žádné podobné natrackované záznamy. Zkus upravit klíčová slova výše a dej "Aktualizovat vyhledávání".</div>';
       return;
     }
     list.forEach(function (s) {
@@ -123,12 +176,35 @@
     });
   }
 
+  function runSearch() {
+    suggestionsEl.innerHTML = '<div class="empty-hint">Načítám…</div>';
+    return window.PrimeEstimatesApi.call('search', {
+      memberId: memberId,
+      clientKeywords: clientEditor.getValues().join(','),
+      taskKeywords: taskEditor.getValues().join(','),
+      typeKeywords: typeEditor.getValues().join(','),
+      limit: 5,
+    }).then(function (searchResult) {
+      if (searchResult && searchResult.error) {
+        suggestionsEl.innerHTML = '<div class="empty-hint">Nepodařilo se načíst návrhy (' + escapeHtml_(searchResult.error) + ').</div>';
+        return;
+      }
+      renderSuggestions(searchResult ? searchResult.suggestions : []);
+    }).catch(function (err) {
+      suggestionsEl.innerHTML = '<div class="empty-hint">Chyba při načítání: ' + escapeHtml_(String(err)) + '</div>';
+    });
+  }
+
+  document.getElementById('refresh-search').addEventListener('click', runSearch);
+
+  // ---------------------------- init ----------------------------
+
   Promise.all([t.card('name', 'labels'), t.board('name'), t.get('card', 'shared', 'estimates', []), t.get('card', 'shared', 'estimateTotal')])
     .then(function (results) {
       var card = results[0];
       var board = results[1];
       var savedEstimates = results[2];
-      var memberId = t.getContext().member;
+      memberId = t.getContext().member;
 
       document.getElementById('board-name').textContent = board.name;
       document.getElementById('card-name').textContent = card.name;
@@ -149,21 +225,11 @@
       updateTotal();
 
       var labelNames = (card.labels || []).map(function (l) { return l.name; }).filter(Boolean);
+      clientEditor = makeChipEditor('kw-client', board.name ? [board.name] : [], '+ přidat klienta');
+      typeEditor = makeChipEditor('kw-type', labelNames, '+ přidat typ');
+      taskEditor = makeChipEditor('kw-task', card.name ? [card.name] : [], '+ přidat slovo');
 
-      return window.PrimeEstimatesApi.call('search', {
-        memberId: memberId,
-        client: board.name,
-        task: card.name,
-        types: labelNames.join(','),
-        limit: 5,
-      });
-    })
-    .then(function (searchResult) {
-      if (searchResult && searchResult.error) {
-        suggestionsEl.innerHTML = '<div class="empty-hint">Nepodařilo se načíst návrhy (' + escapeHtml_(searchResult.error) + ').</div>';
-        return;
-      }
-      renderSuggestions(searchResult ? searchResult.suggestions : []);
+      return runSearch();
     })
     .catch(function (err) {
       suggestionsEl.innerHTML = '<div class="empty-hint">Chyba při načítání: ' + escapeHtml_(String(err)) + '</div>';
