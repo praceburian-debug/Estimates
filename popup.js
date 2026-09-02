@@ -249,7 +249,8 @@
     var statusEl = document.getElementById('admin-status');
     Promise.all([t.board('members'), window.PrimeEstimatesApi.call('listAdmins', { memberId: memberId })])
       .then(function (results) {
-        var boardMembers = results[0] || [];
+        // t.board('members') resolves to { members: [...] }, not a bare array.
+        var boardMembers = (results[0] && results[0].members) || [];
         var adminsRes = results[1];
         console.log('[Prime Estimates] board members JSON:', JSON.stringify(boardMembers));
         console.log('[Prime Estimates] listAdmins result JSON:', JSON.stringify(adminsRes));
