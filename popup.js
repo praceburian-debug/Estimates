@@ -205,14 +205,16 @@
     statusEl.style.display = 'none';
     listEl.innerHTML = '';
     boardMembers.forEach(function (m) {
-      var isAdmin = adminIds.indexOf(m.id) !== -1;
-      var isMasterRow = m.id === masterAdminId;
+      var mid = m.id || m.idMember || m.memberId;
+      if (!mid) { console.warn('[Prime Estimates] board member with no id field:', m); return; }
+      var isAdmin = adminIds.indexOf(mid) !== -1;
+      var isMasterRow = mid === masterAdminId;
       var row = document.createElement('div');
       row.className = 'admin-member';
 
       var nameSpan = document.createElement('span');
       nameSpan.className = 'name';
-      nameSpan.textContent = m.fullName || m.username || m.id;
+      nameSpan.textContent = m.fullName || m.username || m.name || mid;
       if (isMasterRow) {
         var tag = document.createElement('span');
         tag.className = 'tag';
@@ -228,7 +230,7 @@
         btn.addEventListener('click', function () {
           btn.disabled = true;
           var action = isAdmin ? 'removeAdmin' : 'addAdmin';
-          window.PrimeEstimatesApi.call(action, { memberId: memberId, targetId: m.id }).then(function (res) {
+          window.PrimeEstimatesApi.call(action, { memberId: memberId, targetId: mid }).then(function (res) {
             if (res && res.error) {
               alert('Chyba: ' + res.error);
               btn.disabled = false;
@@ -244,13 +246,31 @@
   }
 
   function loadAdminPanel() {
-    Promise.all([t.board('members'), window.PrimeEstimatesApi.call('listAdmins', { memberId: memberId })]).then(function (results) {
-      var boardMembers = results[0] || [];
-      var adminsRes = results[1];
-      if (adminsRes && adminsRes.error) return; // not master, panel stays hidden
-      document.getElementById('admin-panel').style.display = 'block';
-      renderAdminPanel(boardMembers, adminsRes.admins || [], adminsRes.masterAdminId);
-    });
+    var statusEl = document.getElementById('admin-status');
+    Promise.all([t.board('members'), window.PrimeEstimatesApi.call('listAdmins', { memberId: memberId })])
+      .then(function (results) {
+        var boardMembers = results[0] || [];
+        var adminsRes = results[1];
+        console.log('[Prime Estimates] board members:', boardMembers);
+        console.log('[Prime Estimates] listAdmins result:', adminsRes);
+
+        if (adminsRes && adminsRes.error) return; // not master, panel stays hidden entirely
+
+        document.getElementById('admin-panel').style.display = 'block';
+
+        if (!boardMembers.length) {
+          statusEl.style.display = 'block';
+          statusEl.textContent = 'Trello nevrátilo žádné členy nástěnky (zkontroluj konzoli prohlížeče — F12 — pro detail).';
+          return;
+        }
+        renderAdminPanel(boardMembers, adminsRes.admins || [], adminsRes.masterAdminId);
+      })
+      .catch(function (err) {
+        console.error('[Prime Estimates] loadAdminPanel failed:', err);
+        document.getElementById('admin-panel').style.display = 'block';
+        statusEl.style.display = 'block';
+        statusEl.textContent = 'Chyba při načítání adminů: ' + String(err && err.message ? err.message : err);
+      });
   }
 
   // ---------------------------- init ----------------------------
