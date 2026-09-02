@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Estimates</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="columns">
+    <div class="col">
+      <h3>Odhad</h3>
+      <div id="estimate-rows"></div>
+      <button class="add-row" id="add-row">+ přidat řádek</button>
+      <div class="total-line" id="total-line">Celkem: 0 h</div>
+      <div class="actions">
+        <button class="primary" id="save-btn">Uložit odhad</button>
+        <span class="saved-hint" id="saved-hint" style="display:none;">Uloženo ✓</span>
+      </div>
+      <div style="margin-top:14px;">
+        <a class="link" id="manage-admins-link" style="display:none;">⚙ Spravovat adminy</a>
+      </div>
+    </div>
+    <div class="col">
+      <h3>Reálně natrackovaný čas (návrhy)</h3>
+      <div id="suggestions">
+        <div class="empty-hint">Načítám…</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script src="config.js"></script>
+  <script src="api.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
